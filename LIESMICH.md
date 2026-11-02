@@ -10,9 +10,29 @@ Clips so hintereinander abspielen, dass der Dekoder die Bewegung des einen Clips
 **Bedienung in Kürze**
 1. Zwei oder mehr Clips öffnen. Gut geeignet: zuerst ein ruhiges Bild (Gesicht, Landschaft), danach ein Clip mit viel und klarer Bewegung (Kameraschwenk, Tanz, Wasser).
 2. „Vorbereiten“. Danach liegen alle Clips einheitlich kodiert im Speicher.
-3. Abspielen (Leertaste). **S** springt in den nächsten Clip, **H** gedrückt halten lässt das Bild zerfließen.
+3. Abspielen (Leertaste). **S** springt in den nächsten Clip, **H** gedrückt halten lässt das Bild zerfließen, **K** heilt.
 4. Unter „Eingriffe“ steht, was du gemacht hast. Dort kannst du Einträge löschen oder neue von Hand dazuschreiben.
 5. „Video rendern“ spielt alles noch einmal ab, diesmal Bild für Bild ohne Zeitdruck.
+
+---
+
+## 0. Neu in Runde 2: warum Springen „pures Glitchen“ war
+
+**Du hattest recht, dass da etwas nicht stimmte.** Ein Sprung soll das alte Bild behalten und mit der Bewegung des neuen Clips verschieben. Stattdessen löste sich das Bild nach zehn Bildern in Rauschen auf, und das blieb so. Gemessen habe ich mit zwei Testclips (Mandelbrot, einmal zoomend, einmal schwenkend):
+
+- **Der Grund ist nicht das Bild, sondern die Bits.** VP8 speichert alles mit einem arithmetischen Kodierer (dem „Bool-Kodierer“). Der braucht für jedes Bit eine Wahrscheinlichkeit. Jeder P-Frame darf diese Wahrscheinlichkeiten **für alle folgenden Bilder** ändern (`refresh_entropy_probs = 1`). Nach einem Sprung hat der Dekoder die Wahrscheinlichkeiten des falschen Clips und liest die Bits falsch. Dann kommen falsche Bewegungsvektoren und falsche Koeffizienten heraus, also Rauschen. Bis zum nächsten Keyframe wird das nie besser, und es kommt keiner: darum „ewig“.
+- Nachgesehen habe ich das, indem ich den Kopf jedes Pakets selbst gelesen habe (`js/vp8-kopf.js`, RFC 6386): Ohne Gegenmaßnahme stand bei allen 300 Paketen `refresh_entropy_probs = 1`.
+- **Das Gefühl „der Frame und ein anderer“:** VP8 hat drei Bezugsbilder, nicht eins. Neben dem letzten Bild gibt es das „Golden Frame“, das etwa alle 8 Bilder erneuert wird, und eine Kopie davon („Altref“). Blöcke, die sich auf diese beziehen, holen nach einem Sprung ein älteres Bild aus dem alten Clip. Messbar war das als Flackern aber kaum, das Rauschen war der Hauptgrund.
+
+**Die Lösung:** Kodieren mit zwei **Zeitschichten** (`scalabilityMode: "L1T2"`). Damit eine Schicht ohne die andere abspielbar bleibt, schreibt der Kodierer jedes Paket so, dass es die Wahrscheinlichkeiten nur für sich selbst ändert (gemessen: überall `0`). Jetzt verschiebt ein Sprung wirklich Blöcke des alten Bildes, statt Bits falsch zu lesen. Wer das alte Rauschen will, setzt beim Vorbereiten den Haken **wild**.
+
+**Mehr Kontrolle:**
+- **Heilen (K):** An dieser Stelle kommt das Bild der Quelle als Keyframe, und das Bild ist wieder sauber. Dafür kodiert „Vorbereiten“ jedes Bild ein zweites Mal als Keyframe (`daten.schluessel`, mit höherer Bitrate). Das dauert doppelt so lang und braucht etwa 20 KB pro Bild.
+- **Heilen nach:** Nach jedem Sprung heilt es von selbst nach so vielen Bildern (Standard 45, also 1,5 Sekunden). Damit wird aus dem endlosen Mosh ein Übergang. 0 = nie.
+- **Beruhigen:** Jedes neue Bild wird nur teilweise deckend über das alte gelegt. Harte Wechsel werden so zu Schlieren, und das wirkt viel weniger epileptisch. Wer im System „Bewegung reduzieren“ eingestellt hat, bekommt das gleich auf 0,6 (siehe Fahrplan: jeder flackernde Effekt bekommt eine ruhigere Fassung).
+- **Halten** nimmt jetzt immer ein Paket, das das Bezugsbild erneuert. Mit Zeitschichten tut das nur jedes zweite. Die anderen würden immer wieder dasselbe Bild verschieben, und es stünde still.
+- Ein Fehler ist behoben: Ereignisse, die mitten in einem Halten lagen, wurden übersprungen. Jetzt geht `baueFolge` Bild für Bild vor, und Heilen oder Springen beendet ein Halten.
+- **Bitrate** steht jetzt auf 1 Mbit/s: weniger Rest heißt ruhigeres Wandern der Blöcke.
 
 ---
 
@@ -72,7 +92,7 @@ Man könnte die Pakete direkt aus den Originaldateien nehmen, aber:
 
 Darum `hardwareAcceleration: "prefer-software"` im Dekoder (`dekoder.js`): Der Software-Dekoder (libvpx) ist gutmütiger.
 
-**Bitrate:** Wenig Bitrate heißt grobe Blöcke und wenig Rest. Der Mosh hält dann lange, weil kaum korrigiert wird. Viel Bitrate heißt viel Rest, und das Bild „heilt“ schneller zu Clip 2.
+**Bitrate:** Wenig Bitrate heißt grobe Blöcke und wenig Rest. Der Mosh hält dann lange, weil kaum korrigiert wird. Viel Bitrate heißt viel Rest: Das Bild geht schneller in Clip 2 über, und es flimmert mehr.
 
 **Breite:** Das Moshen sieht in 480 bis 640 Pixel Breite am besten aus. Die Blöcke sind dann sichtbar, und live bleibt es flüssig. Beim Export kannst du im Export-Fenster hochskalieren lassen.
 
@@ -97,7 +117,7 @@ Darum `hardwareAcceleration: "prefer-software"` im Dekoder (`dekoder.js`): Der S
 
 - **Safari** kann meistens kein VP8 kodieren. Dann sagt „Vorbereiten“ das, und es geht nur in Chrome, Edge oder Firefox. Zen ist Firefox und sollte gehen; getestet habe ich in Chromium.
 - **Kein Ton.** Ton zu moshen ergibt nichts Sinnvolles, und den Originalton passend zu Sprüngen und Halten zu schneiden, wäre ein eigenes Projekt. Ton legst du in DaVinci darunter.
-- **Speicher:** Alle Pakete liegen im Speicher. Bei 640 Pixel Breite und 2 Mbit/s sind das etwa 15 MB pro Minute, also kein Problem.
+- **Speicher:** Alle Pakete liegen im Speicher, dazu jedes Bild noch einmal als Keyframe zum Heilen. Bei 640 Pixel Breite sind das etwa 40 bis 50 MB pro Minute Video. Für ein paar Minuten ist das kein Problem, für ganze Filme schon.
 - **Das Live-Bild ist nicht bildgenau getaktet:** Wenn der Rechner hinterherhinkt, läuft es langsamer, es lässt aber kein Bild aus. Der Export ist immer genau.
 - **Andere Seitenverhältnisse** werden auf das des ersten Clips gestreckt.
 
