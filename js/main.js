@@ -181,9 +181,11 @@ function zeichne(c, b) {
 
 // Wohin der Dekoder zeichnet: beim Spulen direkt ins Bild, beim Abspielen in einen Vorrat (siehe unten)
 let zeichenZiel = null; // null = sichtbar
+let zielRuhig = false; // ins Ziel auch mit „Beruhigen“ (Export), sonst ganz (Vorrat beim Abspielen)
 function dekodiertesBild(b) {
-  if (zeichenZiel) zeichenZiel.getContext("2d").drawImage(b, 0, 0, zeichenZiel.width, zeichenZiel.height);
-  else zeichne(ctx, b);
+  if (!zeichenZiel) zeichne(ctx, b);
+  else if (zielRuhig) zeichne(zeichenZiel.getContext("2d"), b);
+  else zeichenZiel.getContext("2d").drawImage(b, 0, 0, zeichenZiel.width, zeichenZiel.height);
 }
 
 // Bild n der Folge zeigen. Weil jedes Bild auf dem vorigen aufbaut, geht das nur der Reihe nach:
@@ -463,27 +465,36 @@ richteExportEin({
 
 const dialog = erstelleExportDialog({ zeichneVorschau: (einst) => mitRahmen(bild, einst) });
 
+// Video rendern: dieselbe Folge noch einmal von vorn, so schnell es geht, mit demselben Dekoder wie beim
+// Abspielen (ein zweiter Dekoder lief in Zen/Firefox nicht an; einer, der beim Abspielen geht, geht hier auch)
 hole("videoRendern").addEventListener("click", async () => {
   if (!daten) return zeige("Erst vorbereiten.");
-  await halte();
-  const einst = await dialog.oeffne({ art: "video", ueberschrift: "Video rendern", zeit: false });
-  if (!einst) return;
   let aufnahme = null;
-  // eigener Dekoder und eigenes Canvas: dieselbe Folge noch einmal von vorn, so schnell es geht
   const leinwand = document.createElement("canvas");
   leinwand.width = daten.breite;
   leinwand.height = daten.hoehe;
-  const lctx = leinwand.getContext("2d");
-  const export_ = richteDekoderEin(daten, (b) => zeichne(lctx, b));
   try {
+    await halte();
+    const einst = await dialog.oeffne({ art: "video", ueberschrift: "Video rendern", zeit: false });
+    if (!einst) return;
     const rahmen = document.createElement("canvas");
     const mitR = () => mitRahmen(leinwand, einst, rahmen);
     const folge = baue(false); // nur die gemerkten Eingriffe, ohne die flüchtigen
-    export_.neu();
-    await export_.dekodiere(paketVon(daten, folge[0]));
-    aufnahme = await neueAufnahme(mitR(), daten.fps, undefined, null, einst.videoTyp);
+    zeichenZiel = leinwand;
+    zielRuhig = true; // „Beruhigen“ gilt auch im Video
+    dekoder.neu();
+    n = 0;
+    await dekoder.dekodiere(paketVon(daten, folge[0]));
+    try {
+      aufnahme = await neueAufnahme(mitR(), daten.fps, undefined, null, einst.videoTyp);
+    } catch (fehler) {
+      // kann der Browser kein MP4 (H.264) kodieren, eben WebM
+      console.warn(fehler);
+      aufnahme = await neueAufnahme(mitR(), daten.fps, undefined, null, "webm");
+      zeige("MP4 ging hier nicht, das Video wird WebM.");
+    }
     for (let i = 0; i < folge.length; i++) {
-      if (i > 0) await export_.dekodiere(paketVon(daten, folge[i]));
+      if (i > 0) await dekoder.dekodiere(paketVon(daten, folge[i]));
       await aufnahme.bild(mitR(), i / daten.fps, 1 / daten.fps);
       if (i % 15 === 0) {
         zeigeFortschritt(`Video … ${Math.round((i / folge.length) * 100)} %`);
@@ -497,8 +508,10 @@ hole("videoRendern").addEventListener("click", async () => {
     await aufnahme?.abbrechen();
     zeige(`Video ging nicht: ${fehler.message}`);
   } finally {
-    export_.schliesse();
+    zeichenZiel = null;
+    zielRuhig = false;
     zeigeFortschritt(null);
+    await zeigeBild(0).catch(() => {}); // die Vorschau wieder auf den Anfang
   }
 });
 

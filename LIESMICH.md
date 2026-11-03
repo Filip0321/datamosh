@@ -16,6 +16,11 @@ Clips so hintereinander abspielen, dass der Dekoder die Bewegung des einen Clips
 
 ---
 
+## 0. Neu in Runde 4 (3.11.)
+
+- **Video rendern** benutzt jetzt denselben Dekoder wie das Abspielen, statt einen zweiten zu öffnen. In Chromium ging beides (WebM und MP4, auch mit Eingriffen), in Zen (Firefox) nicht; ein zweiter gleichzeitiger `VideoDecoder` ist die wahrscheinlichste Ursache. Dazu: alles im `try`, jeder Fehler steht als Meldung auf der Seite, und kann der Browser kein MP4 (H.264) kodieren, wird es WebM. **Wenn es bei dir immer noch nicht geht: Schick mir die Meldung**, die jetzt erscheint (und was die Konsole sagt, F12).
+- **Größer:** Breite bis 1920, 2560 und „Original“ (größer als der Clip wird nichts), Bitrate bis 20 Mbit/s. Warum es begrenzt war: jedes Bild wird zweimal kodiert (normal und als Heil-Keyframe) und beim Abspielen live dekodiert; bei 1080p ist das viermal so viel Arbeit wie bei 960. Das Vorbereiten dauert länger, das Live-Spiel kann ruckeln. Das gerenderte Video ruckelt nie, es wird Bild für Bild gerechnet.
+
 ## 0. Neu in Runde 3 (3.11.)
 
 - **Zeitleiste wie in Avidemux** (`js/zeitleiste.js`): Jedes Bild der Folge ist ein Kästchen. Rot steht für einen Keyframe, Orange für geheilt, Violett für gehalten oder wiederholt; ein weißer Strich markiert Schnitt oder Sprung. Klicken zeigt das Bild, Ziehen oder Umschalt-Klick wählt aus.
