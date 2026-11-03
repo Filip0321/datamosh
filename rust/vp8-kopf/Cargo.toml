@@ -1,0 +1,8 @@
+[package]
+name = "vp8-kopf"
+version = "0.1.0"
+edition = "2021"
+description = "Den Kopf eines VP8-Pakets lesen: dasselbe wie js/vp8-kopf.js, in Rust (zum Vergleichen)"
+
+[lib]
+path = "src/lib.rs"

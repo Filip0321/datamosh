@@ -16,6 +16,16 @@ Clips so hintereinander abspielen, dass der Dekoder die Bewegung des einen Clips
 
 ---
 
+## 0. Neu in Runde 3 (3.11.)
+
+- **Zeitleiste wie in Avidemux** (`js/zeitleiste.js`): Jedes Bild der Folge ist ein Kästchen. Rot steht für einen Keyframe, Orange für geheilt, Violett für gehalten oder wiederholt; ein weißer Strich markiert Schnitt oder Sprung. Klicken zeigt das Bild, Ziehen oder Umschalt-Klick wählt aus.
+  - **Auswahl löschen:** Das ist intern ein Sprung von der Auswahl zum Bild danach, und die späteren Eingriffe rücken nach vorn. Löschst du den roten Keyframe am Schnitt, ist das genau der Avidemux-Mosh.
+  - **Auswahl wiederholen ×N:** das neue Ereignis „wiederholen“ in `folge.js`, wie Kopieren und Einfügen. Wiederholte P-Frames schieben die Blöcke weiter.
+- **Bilder pro Clip** stehen in der Liste. Vor dem Vorbereiten sind sie geschätzt (Dauer mal Bildrate), danach genau gezählt (Pakete).
+- **An Schnitten moshen** ist jetzt eine Zahl: so viele Bilder lang, danach heilt es. 0 heißt aus, ganz rechts heißt endlos.
+- **Eingriffe merken:** Ist der Haken aus, moshst du live, ohne dass etwas in die Liste oder in den Export kommt. Das gilt bis „Von vorn“ (die Eingriffe liegen dann in `fluechtig`).
+- **Ruckeln:** Gemessen bei 1280 Breite und 8 Mbit/s braucht das Dekodieren etwa 10 ms pro Bild, mit einzelnen Spitzen bis 37 ms. Bei 30 Bildern pro Sekunde sind nur 33 ms Zeit, und jede Spitze war ein Ruckler. Jetzt läuft der Dekoder bis zu 3 Bilder voraus und legt sie in einen Vorrat; gezeigt wird im festen Takt. Der Preis: Ein Eingriff wirkt etwa 0,1 s später.
+
 ## 0. Neu in Runde 2: warum Springen „pures Glitchen“ war
 
 **Du hattest recht, dass da etwas nicht stimmte.** Ein Sprung soll das alte Bild behalten und mit der Bewegung des neuen Clips verschieben. Stattdessen löste sich das Bild nach zehn Bildern in Rauschen auf, und das blieb so. Gemessen habe ich mit zwei Testclips (Mandelbrot, einmal zoomend, einmal schwenkend):

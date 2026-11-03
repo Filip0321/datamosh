@@ -83,7 +83,14 @@
               <option value="zufall">irgendwohin</option>
             </select>
           </label>
-          <label><input type="checkbox" data-wert="schnitte"> an jedem Schnitt moshen</label>
+          <!-- an jedem Schnitt den Keyframe weglassen: so viele Bilder lang moshen, danach heilt es
+               (0 = aus, ganz rechts = nie heilen) -->
+          <label>an Schnitten moshen (Bilder, 0 = aus, ganz rechts = endlos)
+            <input type="range" data-wert="schnitte" min="0" max="121" step="1" value="0">
+            <output></output>
+          </label>
+          <!-- aus: live moshen, ohne dass es in die Liste und den Export kommt (gilt bis „Von vorn“) -->
+          <label><input type="checkbox" data-wert="merken" checked> Eingriffe merken</label>
           <!-- nach jedem Sprung von selbst heilen: der Mosh dauert so viele Bilder, dann ist das Bild wieder sauber -->
           <label>Heilen nach (Bildern, 0 = nie)
             <input type="range" data-wert="heilenNach" min="0" max="120" step="1" value="45">
@@ -97,6 +104,27 @@
         </div>
         <p class="hinweis" id="stelle"></p>
         <p class="hinweis">Leertaste spielt und hält an. S springt in einen anderen Clip, ohne dessen Keyframe: seine Bewegung läuft auf dem alten Bild weiter. H gedrückt halten wiederholt das letzte Bild-Paket: das Bild zerfließt. K heilt: ein Keyframe, und das Bild ist wieder sauber.</p>
+      </details>
+
+      <details class="abschnitt" open>
+        <summary>Zeitleiste</summary>
+        <div class="zeitleiste-rahmen">
+          <canvas id="zeitleiste" height="48"></canvas> <!-- js/zeitleiste.js -->
+        </div>
+        <p class="hinweis" id="auswahlInfo">keine Auswahl (ziehen oder Umschalt-Klick)</p>
+        <div class="steuerung">
+          <button type="button" id="auswahlWeg">Auswahl löschen</button>
+          <label>wiederholen
+            <input type="number" id="wiederholMal" min="1" max="50" step="1" value="3"> ×
+          </label>
+          <button type="button" id="auswahlWiederholen">Auswahl wiederholen</button>
+          <button type="button" id="auswahlAufheben">Auswahl aufheben</button>
+          <label>Breite pro Bild
+            <input type="range" data-wert="pxBild" min="1" max="20" step="1" value="6">
+            <output></output>
+          </label>
+        </div>
+        <p class="hinweis">Rot: Keyframe · Orange: geheilt · Violett: gehalten oder wiederholt · weißer Strich: Schnitt oder Sprung. Klicken zeigt das Bild, Ziehen wählt aus. Einen Keyframe am Schnitt löschen ist der klassische Mosh.</p>
       </details>
 
       <details class="abschnitt">
