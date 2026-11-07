@@ -8,13 +8,122 @@ Clips so hintereinander abspielen, dass der Dekoder die Bewegung des einen Clips
 - Mit deinem lokalen Server ausliefern.
 
 **Bedienung in Kürze**
-1. Zwei oder mehr Clips öffnen. Gut geeignet: zuerst ein ruhiges Bild (Gesicht, Landschaft), danach ein Clip mit viel und klarer Bewegung (Kameraschwenk, Tanz, Wasser).
+1. Zwei oder mehr Clips öffnen (Videos oder Bilder). Gut geeignet: zuerst ein ruhiges Bild (Gesicht, Landschaft), danach ein Clip mit viel und klarer Bewegung (Kameraschwenk, Tanz, Wasser).
 2. „Vorbereiten“. Danach liegen alle Clips einheitlich kodiert im Speicher.
 3. Abspielen (Leertaste). **S** springt in den nächsten Clip, **H** gedrückt halten lässt das Bild zerfließen, **K** heilt.
 4. Unter „Eingriffe“ steht, was du gemacht hast. Dort kannst du Einträge löschen oder neue von Hand dazuschreiben.
-5. „Video rendern“ spielt alles noch einmal ab, diesmal Bild für Bild ohne Zeitdruck.
+5. Unter „Zeitleiste“ Clips auf Spuren schieben, I-Frames löschen, P-Frames wiederholen, umkehren, mischen.
+6. „Video rendern“ spielt alles noch einmal ab, diesmal Bild für Bild ohne Zeitdruck, mit Ton nach Wahl.
 
 ---
+
+## 0. Neu in Runde 5, Teil 2 (7.11.): Schnitt, I- und P-Zeilen, Ton
+
+### Standbilder und gleichmäßige Bildrate (`quellen.js`, `kodieren.js`)
+- **Bilder öffnen:** PNG, JPG, WebP und andere gehen jetzt direkt als Clip.
+  - Die Länge stellst du in der Clipliste in Sekunden ein.
+  - Kodiert wird ein Bild wie ein Video ohne Bewegung: ein I-Frame, danach P-Frames, die nichts verschieben.
+  - Spannend wird es erst im Mosh: Ein Bild ist die perfekte Leinwand für die Bewegung eines anderen Clips.
+- **Warum aus 10 s nur 3 Bilder wurden:** Viele Videos haben eine **variable Bildrate**. Ein Standbild, das als Video gespeichert ist, besteht oft nur aus wenigen Bildern, die jeweils sekundenlang gelten. Früher wurde jedes gespeicherte Bild genau einmal kodiert.
+  - Jetzt wird abgetastet wie beim Film: Zur Zeit *i / fps* kommt jeweils das Bild, das gerade gilt.
+  - Die Bildrate ist die des ersten Videos.
+- **Nur Neues wird kodiert:** Jeder Clip merkt sich sein Ergebnis. Kommt ein Clip dazu oder ändert sich die Länge eines Bilds, wird nur dieser eine Clip neu kodiert, und das geht von selbst.
+
+### Der Schnitt (`schnitt.js`)
+Die Clips liegen auf **Spuren** wie in DaVinci, und die oberste Spur gewinnt.
+- **Bearbeiten:**
+  - Ziehen verschiebt einen Clip, auch auf eine andere Spur. Über die oberste Spur hinaus entsteht eine neue.
+  - Die Ränder ziehen kürzt den Clip.
+  - Gezogene Clips rasten an Kanten und an der Stelle ein.
+  - „Spur ↑ / ↓“ tauscht ganze Spuren.
+- **Aus der Lage wird die Grundfolge:** Für jede Zeit gilt der Clip, der oben liegt, mit dem passenden Bild darin.
+- **Ein Schnitt** ist überall, wo das nächste Bild nicht einfach das nächste Bild desselben Clips ist:
+  - wo ein Clip anfängt
+  - wo ein oberer Clip anfängt oder aufhört
+  - nach einer Lücke
+
+  Lücken fallen im Video weg.
+- **An jedem Schnitt kommt ein I-Frame:**
+  - Mitten in einem Clip gibt es kein I-Frame aus dem normalen Kodierer. Es kommt deshalb aus dem zweiten Kodierer, der jedes Bild auch als Keyframe kodiert hat (das Heilen).
+  - Ist das I-Frame gelöscht, laufen die P-Frames des neuen Clips auf dem alten Bild weiter.
+  - Am Anfang eines Clips fällt das Bild dann ganz weg, denn dort gibt es nur den Keyframe. Avidemux macht es genauso.
+
+### Ergebnis-Zeilen (`zeitleiste.js`)
+Unter dem Schnitt liegt das, was wirklich in den Dekoder geht.
+- **Bilder:** die Quelle jedes Pakets. Das ist nicht das gemoshte Bild, das gibt es erst beim Dekodieren.
+- **I-Zeile:**
+  - rot: I-Frame am Schnitt
+  - orange: geheilt
+  - roter Rahmen ohne Füllung: gelöschtes I-Frame
+- **P-Zeile:** in der Farbe des Clips; violett heißt wiederholt oder eingesetzt.
+
+Durch Halten und Wiederholen wird das Ergebnis länger als der Schnitt. Deshalb hat jeder Teil sein eigenes Lineal. Die blaue Linie zeigt dieselbe Stelle in beiden.
+
+Die Zeitleiste zeichnet nur den sichtbaren Ausschnitt. Darum kann man beliebig weit hineinzoomen, und die alte Grenze von 16 000 Pixeln ist weg.
+
+**Genau auswählen wie in Avidemux:**
+
+| Taste | Wirkung |
+|---|---|
+| ← → | ein Bild weiter (Umschalt: zehn) |
+| Pos1 / Ende | Anfang / Ende |
+| A und B | Anfang und Ende der Auswahl auf die Stelle |
+| Entf | Auswahl löschen |
+| Esc | Auswahl aufheben |
+| Strg + Mausrad | zoomen |
+
+### Was man mit der Auswahl machen kann (`folge.js`: Eingriff „ersetzen“)
+Alles ist derselbe Eingriff: *weg* Bilder der Grundfolge fallen weg, dafür kommt eine Liste von Paketen.
+
+| Knopf | weg | Liste | was passiert |
+|---|---|---|---|
+| Löschen | Auswahl | leer | Avidemux-Mosh, wenn ein I-Frame drin ist |
+| Wiederholen ×N | Auswahl | Auswahl (N+1)× | P-Frames verdoppeln: die Bewegung schiebt weiter |
+| Umkehren | Auswahl | Auswahl rückwärts | Jedes P-Frame verschiebt von der falschen Seite aus. Die Bewegung läuft nicht zurück, sie verschmiert anders. |
+| Mischen | Auswahl | P-Frames eines anderen Clips | fremde Bewegung auf diesem Bild, danach die eigenen P-Frames auf dem gemoshten Bild |
+
+Dazu kommen zwei Knöpfe für I-Frames:
+- **I-Frame löschen / zurück:** schaltet die Schnitte in der Auswahl um. Ein geheiltes I-Frame aus einem „Heilen“-Eingriff fällt dabei weg.
+- **I durch Bild ersetzen:** Ein fremdes Bild kommt als Standbild, ein Bild lang, auf eine neue oberste Spur genau an den Schnitt. Danach geht der Clip ohne sein I-Frame weiter, und seine P-Frames bewegen das fremde Bild.
+
+Fällt ein Eingriff in der Liste weg (×), rücken die dahinter wieder zurück.
+
+**Ein Sprung (S) gilt bis zum nächsten Schnitt.** Früher lief er bis zum Ende aller Clips. Mit Spuren passt das nicht mehr: Der Schnitt bestimmt die Länge, und ein Sprung ersetzt, was darin liegt.
+
+### Ton (`ton.js`)
+Vier Wahlen unter „Export“:
+- **Folgt den Bildern:** Zu jedem Bild kommt sein Stück Originalton, 1/fps Sekunden lang.
+  - Wiederholte P-Frames wiederholen ihr Stück, das stottert wie eine hängende CD.
+  - Sprünge springen im Ton mit.
+  - Läuft alles normal, liegen die Stücke lückenlos hintereinander.
+- **Läuft durch:** der Ton des Schnitts, ungestört vom Mosh.
+- **Eigene Datei**
+- **Kein Ton**
+
+Damit nichts wegdriftet, wird jede Grenze aus der Bildnummer gerechnet (`round(i · 48000 / fps)`) und nicht aufaddiert. Beim Abspielen auf der Seite ist noch nichts zu hören, nur im gerenderten Video.
+
+### Konsole
+`datamosh.folge`, `datamosh.herkunft`, `datamosh.grund` und `datamosh.clips` kannst du in der Konsole (F12) ansehen.
+
+## 0. Neu in Runde 5, Teil 1 (7.11.): Rendern am PC
+
+**Rendern am PC.** Runde 4 hatte die falsche Ursache im Verdacht (zwei Dekoder). Die zwei wahrscheinlicheren:
+
+- **Zen: es passiert gar nichts.** Der Dekoder bekam ein Paket und wartete auf genau dessen Bild, bevor er das nächste schickte. Manche Dekoder geben ein Bild aber erst heraus, wenn schon das nächste Paket da ist. Dann wartet man ewig, und „Video rendern“ wartet als Erstes darauf, dass das Abspielen aufhört. Deshalb kam keine Meldung und kein Fehler.
+  - Jetzt gehen die Pakete voraus (`dekoder.schicke`), jedes mit einem Versprechen für sein Bild.
+  - Steht der Dekoder still, obwohl Bilder offen sind, wird er gespült (`flush`).
+  - Nach 5 s gibt es einen Fehler statt Stillstand. `halte()` startet den Dekoder nach 1,5 s neu, statt ewig zu warten.
+- **Chrome: alles schwarz.** `drawImage(VideoFrame)` zeichnet auf manchen Grafikkarten schwarz. Das kann schon beim Originalvideo passieren (Hardware-Dekoder) oder erst beim VP8. Nach dem Vorbereiten wird jetzt die Helligkeit gemessen, und wenn nötig wird stufenweise umgeschaltet:
+  1. Quelle schwarz: noch einmal mit dem Software-Dekoder.
+  2. Immer noch schwarz: der **CPU-Weg** (`/lib/yuv.js`). Die Pixel kommen mit `copyTo()` in den Arbeitsspeicher, YUV wird selbst nach RGB gerechnet und mit `putImageData` gezeichnet. Die Theorie steht oben in `yuv.js`.
+  3. Dekodiertes Bild schwarz: dasselbe für den VP8-Dekoder.
+- **Protokoll** (unten auf der Seite): jeder Schritt mit Uhrzeit. Hängt etwas oder bleibt es schwarz, bitte „Kopieren“ und mir schicken. Dann sehe ich, welcher Schritt der letzte war.
+
+Getestet in Chromium, auch mit zwei Simulationen:
+- ein Dekoder, der zwei Bilder zurückhält
+- `drawImage(VideoFrame)`, das gar nichts zeichnet
+
+Beides rendert jetzt richtig, die Farben stimmen. Firefox konnte ich hier nicht testen.
 
 ## 0. Neu in Runde 4 (3.11.)
 
@@ -131,7 +240,7 @@ Darum `hardwareAcceleration: "prefer-software"` im Dekoder (`dekoder.js`): Der S
 ## 5. Ehrlich
 
 - **Safari** kann meistens kein VP8 kodieren. Dann sagt „Vorbereiten“ das, und es geht nur in Chrome, Edge oder Firefox. Zen ist Firefox und sollte gehen; getestet habe ich in Chromium.
-- **Kein Ton.** Ton zu moshen ergibt nichts Sinnvolles, und den Originalton passend zu Sprüngen und Halten zu schneiden, wäre ein eigenes Projekt. Ton legst du in DaVinci darunter.
+- **Ton nur im gerenderten Video**, nicht beim Abspielen auf der Seite (siehe Runde 5).
 - **Speicher:** Alle Pakete liegen im Speicher, dazu jedes Bild noch einmal als Keyframe zum Heilen. Bei 640 Pixel Breite sind das etwa 40 bis 50 MB pro Minute Video. Für ein paar Minuten ist das kein Problem, für ganze Filme schon.
 - **Das Live-Bild ist nicht bildgenau getaktet:** Wenn der Rechner hinterherhinkt, läuft es langsamer, es lässt aber kein Bild aus. Der Export ist immer genau.
 - **Andere Seitenverhältnisse** werden auf das des ersten Clips gestreckt.
